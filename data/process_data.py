@@ -47,6 +47,8 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
     for column in categories:
         categories[column] = pd.to_numeric(categories[column].str[-1]) #take last character of string and convert to numeric
 
+    categories['related'] = categories['related'].where(categories['related']==0, 1) #fix instances where related=2 to related=1
+
     #Replace categories column in df with new category columns
     df = df.drop(columns='categories') #drop original categories column in df
     df = pd.concat([df, categories], axis='columns') #concat original df with new categories dataframe
