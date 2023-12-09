@@ -8,14 +8,14 @@ def load_data(messages_filepath: str, categories_filepath: str) -> pd.DataFrame:
 
     Parameters
     ----------
-    messages_filepath : str
+    messages_filepath : `str`
         Path to the disaster messages csv file
-    categories_filepath : str
+    categories_filepath : `str`
         Path to the disaster categories csv file
 
     Returns
     -------
-    pandas.DataFrame
+    `pandas.DataFrame`
         Message and category csv data joined on `id`
     """
     messages = pd.read_csv(messages_filepath)
@@ -29,12 +29,12 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
     Parameters
     ----------
-    df : pandas.DataFrame
+    df : `pandas.DataFrame`
         The disaster data loaded from the `load_data` function
     
     Returns
     -------
-    pandas.DataFrame
+    `pandas.DataFrame`
         The transformed/cleaned data
     """
     
@@ -66,9 +66,9 @@ def save_data(df: pd.DataFrame, database_filename: str):
 
     Parameters
     ----------
-    df : pandas.DataFrame
+    df : `pandas.DataFrame`
         The cleaned disaster message and category dataset
-    database_filename : str
+    database_filename : `str`
         Path to the sqlite database file
     """
     engine = create_engine(f'sqlite:///{database_filename}')
