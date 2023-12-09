@@ -7,8 +7,9 @@ from nltk.tokenize import word_tokenize
 
 from flask import Flask
 from flask import render_template, request, jsonify
-from plotly.graph_objs import Bar
-from sklearn.externals import joblib
+from plotly.graph_objs import Bar, Histogram
+#from sklearn.externals import joblib
+import joblib #using this for the version of Python I am running
 from sqlalchemy import create_engine
 
 
@@ -26,11 +27,11 @@ def tokenize(text):
     return clean_tokens
 
 # load data
-engine = create_engine('sqlite:///../data/YourDatabaseName.db')
-df = pd.read_sql_table('YourTableName', engine)
+engine = create_engine('sqlite:///../data/DisasterResponse.db')
+df = pd.read_sql_table('messages', engine).drop(columns=['child_alone']) #drop child alone since we removed it from our model due to insufficient data
 
 # load model
-model = joblib.load("../models/your_model_name.pkl")
+model = joblib.load("../models/classifier.pkl")
 
 
 # index webpage displays cool visuals and receives user input text for model
@@ -43,6 +44,11 @@ def index():
     genre_counts = df.groupby('genre').count()['message']
     genre_names = list(genre_counts.index)
     
+    category_counts = df.sum(numeric_only=True)[1:] #exclude first (id) column
+    category_names = df.columns[4:]
+
+    word_counts = list(df['message'].apply(lambda text : len(tokenize(text))))
+
     # create visuals
     # TODO: Below is an example - modify to create your own visuals
     graphs = [
@@ -61,6 +67,41 @@ def index():
                 },
                 'xaxis': {
                     'title': "Genre"
+                }
+            }
+        },
+        #category counts
+        {
+            'data': [
+                Bar(
+                    x=category_names,
+                    y=category_counts
+                )
+            ],
+
+            'layout': {
+                'title': 'Distribution of Message Categories',
+                'yaxis': {
+                    'title': "Count"
+                }
+            }
+        },
+
+        #word count histogram
+        {
+            'data': [
+                Histogram(
+                    histfunc="count",
+                    x=word_counts
+                )
+            ],
+            'layout' : {
+                'title': 'Distribution of Message Word Count',
+                'yaxis': {
+                    'title': "Count"
+                },
+                'xaxis' : {
+                    'title' : 'Number of Words'
                 }
             }
         }
@@ -93,7 +134,7 @@ def go():
 
 
 def main():
-    app.run(host='0.0.0.0', port=3000, debug=True)
+    app.run(host='127.0.0.1', port=3000, debug=True)
 
 
 if __name__ == '__main__':
