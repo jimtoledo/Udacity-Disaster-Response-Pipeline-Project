@@ -1,24 +1,144 @@
 import sys
+from sqlalchemy import create_engine
+import pandas as pd
+import re
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+from typing import Tuple, List
+
+def load_data(database_filepath: str) -> Tuple[pd.Series, pd.DataFrame, List[str]]:
+    """
+    Loads disaster data from sqlite database
+
+    Parameters
+    ----------
+    database_filepath : str
+        Path to the sqlite database file
+
+    Returns
+    -------
+    X : pd.Series
+        Message data
+    y : pd.DataFrame
+        Corresponding category classification data
+    category_names : list[str]
+        List of categories
+    """
+    nltk.download(['punkt', 'wordnet', 'averaged_perceptron_tagger', 'stopwords'])
+    # load data from database
+    engine = create_engine(f'sqlite:///{database_filepath}')
+    df = pd.read_sql('messages', engine)
+
+    #get model input and output data
+    X = df['message']
+    y = df.drop(columns=['id','message','original','genre', 'child_alone']) #drop child_alone category because it has all 0s
+    
+    return X, y, list(y.columns)
 
 
-def load_data(database_filepath):
-    pass
+def tokenize(text: str) -> List[str]:
+    """
+    Normalizes, tokenizes, and lemmatizes text and returns the processed tokens
+
+    Parameters
+    ----------
+    text : str
+        The text to be tokenized
+
+    Returns
+    -------
+    list[str]
+        List of normalized/lemmatized tokens
+    
+    """
+    #replace all urls with urlplaceholder
+    url_regex = 'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
+    urls = re.findall(url_regex, text)
+    for url in urls:
+        text = text.replace(url, 'urlplaceholder')
+    
+    #normalize and tokenize text
+    text = re.sub(r'[^a-zA-Z0-9],', ' ', text.lower())
+    tokens = word_tokenize(text)
+    
+    #strip tokens and remove stop words
+    stop_words = set(stopwords.words("english"))
+    tokens = [token.strip() for token in tokens if token.strip() not in stop_words]
+    
+    #lemmatize tokens
+    lemmatizer = WordNetLemmatizer()
+    tokens = [lemmatizer.lemmatize(token) for token in tokens]
+    
+    return tokens
 
 
-def tokenize(text):
-    pass
+def build_model() -> GridSearchCV:
+    """
+    Builds machine learning Pipeline and GridSearchCV
+
+    Returns
+    -------
+    GridSearchCV for the classifier model
+    """
+    #Build pipeline
+    pipeline = Pipeline([
+        ('text_pipeline', TfidfVectorizer(tokenizer=tokenize)), #TfidfVectorizer = CountVectorizer->TFidfTransformer
+        ('clf', MultiOutputClassifier(RandomForestClassifier(n_estimators=200), n_jobs=-1)) #MultiOutputClassifier using RandomForestClassifier estimator
+    ])
+
+    #Build GridSearchCV using parameters below
+    parameters = {
+        'text_pipeline__max_df' : [0.5, 0.75, 1.0],
+        'text_pipeline__min_df' : [1, 50, 100]
+    }
+
+    #return GridSearchCV(pipeline, {'text_pipeline__min_df' : [50, 100]}, scoring='f1_micro', cv=2) #Training may take long using current parameters, use this for shorter processing
+    return GridSearchCV(pipeline, parameters, scoring='f1_micro', cv=3)
 
 
-def build_model():
-    pass
+def evaluate_model(model: GridSearchCV, X_test: pd.Series, Y_test: pd.DataFrame, category_names: List[str]):
+    """
+    Evaluates the best model of GridSearchCV after fitting
+
+    Parameters
+    ----------
+    model : GridSearchCV
+        The GridSearchCV containing the model
+    X_test : pd.Series
+        The X values of the test set
+    Y_test : pd.DataFrame
+        The true Y values of the test set
+    category_names : List[str]
+        The category names in Y
+    """
+    y_pred = model.best_estimator_.predict(X_test)
+    for i, category in enumerate(category_names):
+        print(category_names[i] + '\n' + classification_report(Y_test.iloc[:,i], y_pred[:,i]))
+        print(confusion_matrix(Y_test.iloc[:,i], y_pred[:,i]))
 
 
-def evaluate_model(model, X_test, Y_test, category_names):
-    pass
+def save_model(model: GridSearchCV, model_filepath: str):
+    """
+    Saves the best model to a pickle file
 
-
-def save_model(model, model_filepath):
-    pass
+    Parameters
+    ----------
+    model : GridSearchCV
+        The GridSearchCV containing the model
+    model_filepath : str
+        File path to save to
+    """
+    import pickle
+    with open(model_filepath, mode='wb') as file:
+        pickle.dump(model.best_estimator_, file)
 
 
 def main():
